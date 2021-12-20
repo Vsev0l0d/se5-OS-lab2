@@ -14,7 +14,6 @@
 #include <linux/pci.h>
 
 #define WR_VALUE _IOW('a','a',struct message*)
-#define RD_VALUE _IOR('a','b',struct message*)
 #define MAX_PCI_DEV_COUNT 64
 
 MODULE_LICENSE("Dual BSD/GPL");
@@ -28,6 +27,7 @@ static struct cdev etx_cdev;
 struct pci_dev_info {
     unsigned short  device[MAX_PCI_DEV_COUNT];
     unsigned short  vendor[MAX_PCI_DEV_COUNT];
+    int pci_dev_count;
 };
 
 struct signal_struct_info {
@@ -40,16 +40,14 @@ struct signal_struct_info {
 };
 
 struct message {
-    struct signal_struct_info ssi;
-    struct pci_dev_info pdi;
-    int pci_dev_count;
+    struct signal_struct_info* ssi;
+    struct pci_dev_info* pdi;
+    pid_t pid;
 };
 
 struct pci_dev* pci_dev;
-struct pci_dev_info* pdi;
 struct task_struct* ts;
-struct signal_struct_info* ssi;
-struct message* msg;
+struct message msg;
 
 /*
 ** Function Prototypes
@@ -113,7 +111,6 @@ static ssize_t etx_write(struct file *filp, const char __user *buf, size_t len, 
         return len;
 }
 
-pid_t pid = 0;
 
 /*
 ** This function will be called when we write IOCTL on the Device file
@@ -122,21 +119,12 @@ static long etx_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
          switch(cmd) {
                 case WR_VALUE:
-                        if( copy_from_user(&pid ,(pid_t*) arg, sizeof(pid)) )
+                        if( copy_from_user(&msg ,(struct message*) arg, sizeof(msg)) )
                         {
                                 pr_err("Data Write : Err!\n");
                         }
-                        pr_info("Pid = %d\n", pid);
-                        break;
-                case RD_VALUE:
+                        pr_info("Pid = %d\n", msg.pid);
                         fill_structs();
-                        if( copy_to_user((struct message*) arg, msg, sizeof(struct message)) )
-                        {
-                                pr_err("Data Read : Err!\n");
-                        }
-                        vfree(pdi);
-                        vfree(ssi);
-                        vfree(msg);
                         break;
                 default:
                         pr_info("Default\n");
@@ -189,31 +177,26 @@ r_class:
 
 void fill_structs() {
     int i = 0;
-    pdi = vmalloc(sizeof(struct pci_dev_info));
     while ((pci_dev = pci_get_device(PCI_ANY_ID, PCI_ANY_ID, pci_dev))) {
         if (i >= MAX_PCI_DEV_COUNT) break;
-        pdi->device[i] = pci_dev->device;
-        pdi->vendor[i] = pci_dev->vendor;
+        msg.pdi->device[i] = pci_dev->device;
+        msg.pdi->vendor[i] = pci_dev->vendor;
         i++;
     }
 
-    ts = get_pid_task(find_get_pid(pid), PIDTYPE_PID);
-    ssi = vmalloc(sizeof(struct signal_struct_info));
+    ts = get_pid_task(find_get_pid(msg.pid), PIDTYPE_PID);
     if (ts == NULL){
-        ssi->valid = false;
+        msg.ssi->valid = false;
     } else {
-        ssi->valid = true;
-        ssi->nr_threads = ts->signal->nr_threads;
-        ssi->group_exit_code = ts->signal->group_exit_code;
-        ssi->notify_count = ts->signal->notify_count;
-        ssi->group_stop_count = ts->signal->group_stop_count;
-        ssi->flags = ts->signal->flags;
+        msg.ssi->valid = true;
+        msg.ssi->nr_threads = ts->signal->nr_threads;
+        msg.ssi->group_exit_code = ts->signal->group_exit_code;
+        msg.ssi->notify_count = ts->signal->notify_count;
+        msg.ssi->group_stop_count = ts->signal->group_stop_count;
+        msg.ssi->flags = ts->signal->flags;
     }
 
-    msg = vmalloc(sizeof(struct message));
-    msg->pdi = *pdi;
-    msg->ssi = *ssi;
-    msg->pci_dev_count = i;
+    msg.pdi->pci_dev_count = i;
 }
 
 /*
