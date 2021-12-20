@@ -31,6 +31,7 @@ struct pci_dev_info {
 };
 
 struct signal_struct_info {
+    bool valid;
     int     nr_threads;
     int     group_exit_code;
     int     notify_count;
@@ -133,6 +134,9 @@ static long etx_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
                         {
                                 pr_err("Data Read : Err!\n");
                         }
+                        vfree(pdi);
+                        vfree(ssi);
+                        vfree(msg);
                         break;
                 default:
                         pr_info("Default\n");
@@ -195,11 +199,16 @@ void fill_structs() {
 
     ts = get_pid_task(find_get_pid(pid), PIDTYPE_PID);
     ssi = vmalloc(sizeof(struct signal_struct_info));
-    ssi->nr_threads = ts->signal->nr_threads;
-    ssi->group_exit_code = ts->signal->group_exit_code;
-    ssi->notify_count = ts->signal->notify_count;
-    ssi->group_stop_count = ts->signal->group_stop_count;
-    ssi->flags = ts->signal->flags;
+    if (ts == NULL){
+        ssi->valid = false;
+    } else {
+        ssi->valid = true;
+        ssi->nr_threads = ts->signal->nr_threads;
+        ssi->group_exit_code = ts->signal->group_exit_code;
+        ssi->notify_count = ts->signal->notify_count;
+        ssi->group_stop_count = ts->signal->group_stop_count;
+        ssi->flags = ts->signal->flags;
+    }
 
     msg = vmalloc(sizeof(struct message));
     msg->pdi = *pdi;
