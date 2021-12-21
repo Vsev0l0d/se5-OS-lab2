@@ -31,10 +31,6 @@ struct message {
     pid_t pid;
 };
 
-struct pci_dev_info* pdi;
-struct signal_struct_info* ssi;
-struct message* msg;
-
 int main(int argc, char *argv[]) {
     if (argc < 2){
         printf("Not enough arguments. Enter pid\n" );
